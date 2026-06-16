@@ -1,0 +1,463 @@
+# Product Requirements Document (PRD)
+
+# Beauty Camera App – Version 1.0 (MVP)
+
+## 1. Overview
+
+### Product Name
+
+Beauty Camera (Working Title)
+
+### Version
+
+1.0 (MVP)
+
+### Objective
+
+Build a fast, lightweight Android beauty camera application that allows users to capture selfies with real-time beauty effects and filters, edit photos, and share them easily.
+
+The MVP should validate market demand while keeping development complexity and cost low.
+
+---
+
+# 2. Goals
+
+## Primary Goals
+
+* Launch on Google Play as quickly as possible.
+* Provide a smooth real-time beauty camera experience.
+* Offer essential beauty enhancements.
+* Support editing of captured and existing photos.
+* Build a solid technical foundation for future AR and AI features.
+
+## Non-Goals
+
+The following are intentionally excluded from V1.0:
+
+* Video recording
+* AR makeup
+* AI retouch
+* User accounts
+* Cloud synchronization
+* Social community
+* Premium subscriptions
+* Livestream support
+
+---
+
+# 3. Target Audience
+
+* Selfie enthusiasts
+* Social media users
+* Students
+* Content creators
+* Casual photography users
+
+Age range: 16–35 years
+
+---
+
+# 4. Platforms
+
+* Android 10+
+* Portrait mode optimized
+* Tablet support optional
+
+---
+
+# 5. Core Features
+
+## 5.1 Camera Module
+
+### Functional Requirements
+
+* Launch directly into camera preview.
+* Support front camera.
+* Support rear camera.
+* Switch camera.
+* Flash (rear camera).
+* Capture photo.
+* Countdown timer:
+
+  * Off
+  * 3 seconds
+  * 5 seconds
+  * 10 seconds
+* Display optional rule-of-thirds grid.
+
+### Acceptance Criteria
+
+* Camera opens within 2 seconds.
+* Capture latency under 300 ms.
+* Preview runs at 30 FPS or higher on supported devices.
+
+---
+
+# 5.2 Real-Time Beauty
+
+Beauty adjustments must update live in the preview.
+
+## Skin Smoothing
+
+Slider:
+
+0–100
+
+Default:
+
+40
+
+---
+
+## Brightness
+
+Slider:
+
+-100 to +100
+
+Default:
+
+0
+
+---
+
+## Skin Tone (Whitening)
+
+Slider:
+
+0–100
+
+Default:
+
+20
+
+---
+
+## Eye Enlargement
+
+Slider:
+
+0–100
+
+Default:
+
+0
+
+Uses facial landmarks.
+
+---
+
+## Face Slimming
+
+Slider:
+
+0–100
+
+Default:
+
+0
+
+Uses facial landmarks.
+
+---
+
+# 5.3 Filters
+
+Provide approximately 15 built-in filters.
+
+Example categories:
+
+* Natural
+* Warm
+* Cool
+* Vintage
+* Pink
+* Film
+* Bright
+* Soft
+* Black & White
+* Sunset
+* Glow
+* Fresh
+* Dream
+* Matte
+* Classic
+
+Each filter includes:
+
+* Live preview
+* Intensity slider (0–100)
+
+---
+
+# 5.4 Photo Editor
+
+Users can edit:
+
+* Captured photo
+* Existing gallery image
+
+Editing tools:
+
+* Crop
+* Rotate
+* Brightness
+* Contrast
+* Saturation
+
+Changes should preview instantly.
+
+---
+
+# 5.5 Gallery Integration
+
+Users can:
+
+* Import photos
+* Save edited images
+* Overwrite or create a copy
+
+Output format:
+
+JPEG
+
+---
+
+# 5.6 Sharing
+
+Support Android share sheet.
+
+Compatible targets include:
+
+* WhatsApp
+* Instagram
+* Facebook
+* Telegram
+* Gmail
+* Other installed apps
+
+---
+
+# 6. User Flow
+
+Open App
+
+↓
+
+Camera Preview
+
+↓
+
+Adjust Beauty / Filter
+
+↓
+
+Capture Photo
+
+↓
+
+Editor Screen
+
+↓
+
+Optional Additional Edits
+
+↓
+
+Save
+
+↓
+
+Share
+
+---
+
+# 7. UI Screens
+
+## Splash
+
+* App logo
+
+---
+
+## Camera Screen
+
+Contains:
+
+* Live preview
+* Capture button
+* Camera switch
+* Flash
+* Timer
+* Grid toggle
+* Beauty controls
+* Filter selector
+* Gallery shortcut
+
+---
+
+## Beauty Panel
+
+Sliders:
+
+* Skin smoothing
+* Brightness
+* Skin tone
+* Eye enlargement
+* Face slimming
+
+---
+
+## Filter Panel
+
+Horizontal scrolling list.
+
+Tap:
+
+Apply instantly.
+
+Long press:
+
+Preview only.
+
+---
+
+## Editor Screen
+
+Toolbar:
+
+* Crop
+* Rotate
+* Brightness
+* Contrast
+* Saturation
+
+Bottom:
+
+* Save
+* Share
+
+---
+
+# 8. Technical Architecture
+
+## Language
+
+Kotlin
+
+---
+
+## UI
+
+Jetpack Compose
+
+---
+
+## Camera
+
+CameraX
+
+---
+
+## Face Detection
+
+MediaPipe Face Mesh
+
+Purpose:
+
+* Face slimming
+* Eye enlargement
+* Facial region detection
+
+---
+
+## Rendering
+
+GPU accelerated rendering
+
+Prefer:
+
+* OpenGL ES shaders
+
+Optional future migration:
+
+* AGSL
+
+---
+
+## Storage
+
+MediaStore
+
+Room database optional.
+
+---
+
+# 9. Performance Requirements
+
+Camera startup:
+
+< 2 seconds
+
+Capture delay:
+
+< 300 ms
+
+Beauty processing:
+
+30 FPS minimum
+
+Memory usage:
+
+< 250 MB
+
+No ANRs during editing.
+
+---
+
+# 10. Permissions
+
+Required:
+
+* Camera
+* Read Media Images
+* Write Media Images (where applicable)
+
+No location permission.
+
+No contacts permission.
+
+No microphone permission.
+
+---
+
+# 11. Analytics (Optional)
+
+Track:
+
+* Camera opens
+* Photos captured
+* Filter usage
+* Beauty slider usage
+* Save actions
+* Share actions
+
+No personally identifiable information.
+
+
+
+Note*: Future Compatibility
+
+Architecture should support:
+
+* Video beauty
+* AR makeup
+* AI retouch
+* Premium filters
+* Subscriptions
+* Beauty presets
+* Cloud backup
+
+without major refactoring.
+
+---
