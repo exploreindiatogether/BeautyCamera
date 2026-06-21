@@ -88,6 +88,22 @@ class CameraGLView @JvmOverloads constructor(
         renderer.faceSlimming = value
     }
 
+    fun setDarkCircleRemover(value: Float) {
+        renderer.darkCircleRemover = value
+    }
+
+    fun setJawSharpening(value: Float) {
+        renderer.jawSharpening = value
+    }
+
+    fun setNoseSlimming(value: Float) {
+        renderer.noseSlimming = value
+    }
+
+    fun setLipColor(value: Float) {
+        renderer.lipColor = value
+    }
+
     fun setFilter(type: Int, intensity: Float) {
         renderer.filterType = type
         renderer.filterIntensity = intensity

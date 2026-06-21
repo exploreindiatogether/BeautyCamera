@@ -101,6 +101,10 @@ fun EditorScreen(
     initialSkinTone: Float,
     initialEyeEnlargement: Float,
     initialFaceSlimming: Float,
+    initialDarkCircleRemover: Float = 0f,
+    initialJawSharpening: Float = 0f,
+    initialNoseSlimming: Float = 0f,
+    initialLipColor: Float = 0f,
     initialFilterType: Int,
     initialFilterIntensity: Float,
     initialCropRatio: String,
@@ -118,6 +122,7 @@ fun EditorScreen(
  
     // Load original bitmap and apply initial aspect ratio crop and beauty filters
     LaunchedEffect(key1 = true) {
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("editor_screen_view")
         isLoading = true
         withContext(Dispatchers.IO) {
             val bitmap = loadBitmapWithRotation(context, imageFile, imageUri)
@@ -140,6 +145,10 @@ fun EditorScreen(
                         skinTone = initialSkinTone,
                         eyeEnlargement = initialEyeEnlargement,
                         faceSlimming = initialFaceSlimming,
+                        darkCircleRemover = initialDarkCircleRemover,
+                        jawSharpening = initialJawSharpening,
+                        noseSlimming = initialNoseSlimming,
+                        lipColor = initialLipColor,
                         landmarks = landmarks
                     )
                 } else {
@@ -684,6 +693,13 @@ fun EditorScreen(
                             IconButton(onClick = {
                                 // Commit the live adjusted bitmap to history
                                 currentBitmap?.let { bmp ->
+                                    val params = android.os.Bundle().apply {
+                                        putFloat("brightness", brightness)
+                                        putFloat("contrast", contrast)
+                                        putFloat("saturation", saturation)
+                                    }
+                                    com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("adjustments_applied", params)
+
                                     pushToHistory(bmp)
                                     // Reset sliders so the next edit starts from 0 relative offset
                                     brightness = 0f
@@ -745,6 +761,12 @@ fun EditorScreen(
                             Spacer(modifier = Modifier.width(16.dp))
                             IconButton(onClick = {
                                 currentBitmap?.let { bmp ->
+                                    val params = android.os.Bundle().apply {
+                                        putInt("filter_type", activeFilter)
+                                        putFloat("filter_intensity", filterIntensity)
+                                    }
+                                    com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("filter_applied", params)
+
                                     pushToHistory(bmp)
                                     activeFilter = 0
                                     filterIntensity = 0.60f
@@ -802,10 +824,18 @@ fun EditorScreen(
                                     val cropH = (cropBoxH * height).toInt().coerceIn(10, height - cropY)
                                     
                                     try {
+                                        val params = android.os.Bundle().apply {
+                                            putString("ratio", cropRatio)
+                                            putInt("width", cropW)
+                                            putInt("height", cropH)
+                                        }
+                                        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("crop_applied", params)
+
                                         val cropped = Bitmap.createBitmap(bmp, cropX, cropY, cropW, cropH)
                                         pushToHistory(cropped)
                                     } catch (e: Exception) {
                                         Log.e("EditorScreen", "Cropping failed", e)
+                                        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.recordException(e)
                                     }
                                     activeTool = "Adjust"
                                 }
@@ -859,6 +889,7 @@ fun EditorScreen(
                         }
                         
                         baseBmp?.let { bmp ->
+                            com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("rotation_applied")
                             val rotated = ImageEditorProcessor.rotateBitmap(bmp, 90f)
                             pushToHistory(rotated)
                         }
@@ -1053,10 +1084,16 @@ fun EditorScreen(
                                         formatStr = formatOption
                                     )
                                     if (saved) {
+                                        val params = android.os.Bundle().apply {
+                                            putString("quality", qualityOption)
+                                            putString("format", formatOption)
+                                        }
+                                        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("photo_saved", params)
                                         Toast.makeText(context, "Saved successfully!", Toast.LENGTH_SHORT).show()
                                         onBack()
                                     } else {
                                         Toast.makeText(context, "Failed to save photo", Toast.LENGTH_SHORT).show()
+                                        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.recordException(Exception("Failed to save photo to MediaStore"))
                                     }
                                 }
                             },
@@ -1182,6 +1219,11 @@ private fun savePhotoToMediaStore(context: Context, bitmap: Bitmap, qualityStr: 
 // Helper to share photo through intent using system chooser
 private fun sharePhotoToPackage(context: Context, bitmap: Bitmap, packageName: String) {
     try {
+        val params = android.os.Bundle().apply {
+            putString("target_package", packageName.ifEmpty { "chooser" })
+        }
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("photo_shared", params)
+
         val cacheFile = File(context.cacheDir, "share_temp_${System.currentTimeMillis()}.jpg")
         FileOutputStream(cacheFile).use { out ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
@@ -1201,6 +1243,7 @@ private fun sharePhotoToPackage(context: Context, bitmap: Bitmap, packageName: S
         context.startActivity(Intent.createChooser(shareIntent, "Share Photo"))
     } catch (e: Exception) {
         Log.e("EditorScreen", "Failed to share image", e)
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.recordException(e)
         Toast.makeText(context, "Failed to share image", Toast.LENGTH_SHORT).show()
     }
 }
@@ -1253,6 +1296,7 @@ private fun loadBitmapWithRotation(context: Context, imageFile: File?, imageUri:
         }
     } catch (e: Exception) {
         Log.e("EditorScreen", "Error loading bitmap with rotation", e)
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.recordException(e)
         return null
     }
 }

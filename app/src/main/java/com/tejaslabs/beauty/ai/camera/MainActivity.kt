@@ -48,6 +48,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize Firebase Suite (Analytics, Crashlytics, Remote Config)
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.init(applicationContext)
+
         enableEdgeToEdge()
 
         checkAndRequestPermissions()

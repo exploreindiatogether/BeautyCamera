@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -88,6 +89,10 @@ fun CameraScreen(
     initialSkinTone: Float,
     initialEyeEnlargement: Float,
     initialFaceSlimming: Float,
+    initialDarkCircleRemover: Float,
+    initialJawSharpening: Float,
+    initialNoseSlimming: Float,
+    initialLipColor: Float,
     initialFilterType: Int,
     initialFilterIntensity: Float,
     initialFlashMode: Int,
@@ -100,6 +105,10 @@ fun CameraScreen(
         skinTone: Float,
         eyeEnlargement: Float,
         faceSlimming: Float,
+        darkCircleRemover: Float,
+        jawSharpening: Float,
+        noseSlimming: Float,
+        lipColor: Float,
         filterType: Int,
         filterIntensity: Float
     ) -> Unit,
@@ -118,6 +127,10 @@ fun CameraScreen(
         skinTone: Float,
         eyeEnlargement: Float,
         faceSlimming: Float,
+        darkCircleRemover: Float,
+        jawSharpening: Float,
+        noseSlimming: Float,
+        lipColor: Float,
         filterType: Int,
         filterIntensity: Float
     ) -> Unit
@@ -134,6 +147,10 @@ fun CameraScreen(
     var skinTone by remember { mutableFloatStateOf(initialSkinTone) }
     var eyeEnlargement by remember { mutableFloatStateOf(initialEyeEnlargement) }
     var faceSlimming by remember { mutableFloatStateOf(initialFaceSlimming) }
+    var darkCircleRemover by remember { mutableFloatStateOf(initialDarkCircleRemover) }
+    var jawSharpening by remember { mutableFloatStateOf(initialJawSharpening) }
+    var noseSlimming by remember { mutableFloatStateOf(initialNoseSlimming) }
+    var lipColor by remember { mutableFloatStateOf(initialLipColor) }
     
     var filterType by remember { mutableIntStateOf(initialFilterType) }
     var filterIntensity by remember { mutableFloatStateOf(initialFilterIntensity) }
@@ -164,6 +181,7 @@ fun CameraScreen(
     // Fetch latest gallery photo thumbnail
     var latestPhotoUri by remember { mutableStateOf<Uri?>(null) }
     LaunchedEffect(key1 = true) {
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("camera_screen_view")
         val photos = GalleryHelper.fetchPhotos(context)
         if (photos.isNotEmpty()) {
             latestPhotoUri = photos.first().uri
@@ -176,10 +194,32 @@ fun CameraScreen(
     LaunchedEffect(skinTone) { cameraView?.setSkinTone(skinTone) }
     LaunchedEffect(eyeEnlargement) { cameraView?.setEyeEnlargement(eyeEnlargement) }
     LaunchedEffect(faceSlimming) { cameraView?.setFaceSlimming(faceSlimming) }
+    LaunchedEffect(darkCircleRemover) { cameraView?.setDarkCircleRemover(darkCircleRemover) }
+    LaunchedEffect(jawSharpening) { cameraView?.setJawSharpening(jawSharpening) }
+    LaunchedEffect(noseSlimming) { cameraView?.setNoseSlimming(noseSlimming) }
+    LaunchedEffect(lipColor) { cameraView?.setLipColor(lipColor) }
     LaunchedEffect(filterType, filterIntensity) { cameraView?.setFilter(filterType, filterIntensity) }
     
-    LaunchedEffect(smoothing, brightness, skinTone, eyeEnlargement, faceSlimming, filterType, filterIntensity) {
-        onBeautySettingsChanged(smoothing, brightness, skinTone, eyeEnlargement, faceSlimming, filterType, filterIntensity)
+    LaunchedEffect(smoothing, brightness, skinTone, eyeEnlargement, faceSlimming,
+        darkCircleRemover, jawSharpening, noseSlimming, lipColor,
+        filterType, filterIntensity) {
+        onBeautySettingsChanged(smoothing, brightness, skinTone, eyeEnlargement, faceSlimming,
+            darkCircleRemover, jawSharpening, noseSlimming, lipColor,
+            filterType, filterIntensity)
+        val params = android.os.Bundle().apply {
+            putFloat("smoothing", smoothing)
+            putFloat("brightness", brightness)
+            putFloat("skinTone", skinTone)
+            putFloat("eyeEnlargement", eyeEnlargement)
+            putFloat("faceSlimming", faceSlimming)
+            putFloat("darkCircleRemover", darkCircleRemover)
+            putFloat("jawSharpening", jawSharpening)
+            putFloat("noseSlimming", noseSlimming)
+            putFloat("lipColor", lipColor)
+            putInt("filterType", filterType)
+            putFloat("filterIntensity", filterIntensity)
+        }
+        com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("beauty_settings_changed", params)
     }
     LaunchedEffect(flashMode, timerSeconds, isGridEnabled, activeAspectRatio) {
         onCameraSettingsChanged(flashMode, timerSeconds, isGridEnabled, activeAspectRatio)
@@ -208,6 +248,10 @@ fun CameraScreen(
                         setSkinTone(skinTone)
                         setEyeEnlargement(eyeEnlargement)
                         setFaceSlimming(faceSlimming)
+                        setDarkCircleRemover(darkCircleRemover)
+                        setJawSharpening(jawSharpening)
+                        setNoseSlimming(noseSlimming)
+                        setLipColor(lipColor)
                         setFilter(filterType, filterIntensity)
                         setFlashMode(flashMode)
                     }.also { cameraView = it }
@@ -258,7 +302,7 @@ fun CameraScreen(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(bottom = if (isPanelVisible) 240.dp else 128.dp, end = 16.dp)
+                    .padding(bottom = if (isPanelVisible) 340.dp else 128.dp, end = 16.dp)
                     .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
@@ -424,13 +468,22 @@ fun CameraScreen(
                     }
 
                     if (activeTab == "Beauty") {
-                        // Sliders list
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(end = 24.dp)) {
+                        // Scrollable sliders list with all beauty options
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .padding(end = 24.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
                             BeautySliderRow(label = "Skin Smoothing", value = smoothing, onValueChange = { smoothing = it })
                             BeautySliderRow(label = "Brightness", value = brightness, min = -0.5f, max = 0.5f, onValueChange = { brightness = it })
                             BeautySliderRow(label = "Skin Tone", value = skinTone, onValueChange = { skinTone = it })
                             BeautySliderRow(label = "Eye Enlargement", value = eyeEnlargement, onValueChange = { eyeEnlargement = it })
                             BeautySliderRow(label = "Face Slimming", value = faceSlimming, onValueChange = { faceSlimming = it })
+                            BeautySliderRow(label = "Dark Circle Remover", value = darkCircleRemover, onValueChange = { darkCircleRemover = it })
+                            BeautySliderRow(label = "Jaw Sharpening", value = jawSharpening, onValueChange = { jawSharpening = it })
+                            BeautySliderRow(label = "Nose Slimming", value = noseSlimming, onValueChange = { noseSlimming = it })
+                            BeautySliderRow(label = "Lip Color", value = lipColor, onValueChange = { lipColor = it })
                         }
                     } else {
                         // Horizontal scroll filters list with intensity slider
@@ -579,6 +632,10 @@ fun CameraScreen(
                                         skinTone = skinTone,
                                         eye = eyeEnlargement,
                                         face = faceSlimming,
+                                        darkCircle = darkCircleRemover,
+                                        jaw = jawSharpening,
+                                        nose = noseSlimming,
+                                        lip = lipColor,
                                         filterType = filterType,
                                         filterIntensity = filterIntensity,
                                         onPhotoCaptured = onPhotoCaptured
@@ -619,6 +676,10 @@ fun CameraScreen(
                     skinTone = skinTone,
                     eye = eyeEnlargement,
                     face = faceSlimming,
+                    darkCircle = darkCircleRemover,
+                    jaw = jawSharpening,
+                    nose = noseSlimming,
+                    lip = lipColor,
                     filterType = filterType,
                     filterIntensity = filterIntensity,
                     onPhotoCaptured = onPhotoCaptured
@@ -753,16 +814,37 @@ private fun triggerCapture(
     skinTone: Float,
     eye: Float,
     face: Float,
+    darkCircle: Float,
+    jaw: Float,
+    nose: Float,
+    lip: Float,
     filterType: Int,
     filterIntensity: Float,
-    onPhotoCaptured: (File, String, Float, Float, Float, Float, Float, Int, Float) -> Unit
+    onPhotoCaptured: (File, String, Float, Float, Float, Float, Float, Float, Float, Float, Float, Int, Float) -> Unit
 ) {
+    val params = android.os.Bundle().apply {
+        putString("aspect_ratio", aspectRatio)
+        putFloat("smoothing", smoothing)
+        putFloat("brightness", brightness)
+        putFloat("skin_tone", skinTone)
+        putFloat("eye_enlargement", eye)
+        putFloat("face_slimming", face)
+        putFloat("dark_circle_remover", darkCircle)
+        putFloat("jaw_sharpening", jaw)
+        putFloat("nose_slimming", nose)
+        putFloat("lip_color", lip)
+        putInt("filter_type", filterType)
+        putFloat("filter_intensity", filterIntensity)
+    }
+    com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.logEvent("photo_captured", params)
+
     cameraView?.capturePhoto(
         onPhotoCaptured = { file ->
-            onPhotoCaptured(file, aspectRatio, smoothing, brightness, skinTone, eye, face, filterType, filterIntensity)
+            onPhotoCaptured(file, aspectRatio, smoothing, brightness, skinTone, eye, face, darkCircle, jaw, nose, lip, filterType, filterIntensity)
         },
         onError = { err ->
             Log.e("CameraScreen", "Capture error", err)
+            com.tejaslabs.beauty.ai.camera.firebase.FirebaseManager.recordException(err)
         }
     )
 }

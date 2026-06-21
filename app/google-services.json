@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1056237657756",
+    "project_id": "beautyaicamera",
+    "storage_bucket": "beautyaicamera.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1056237657756:android:e8e6b80d596b02fcc4d759",
+        "android_client_info": {
+          "package_name": "com.tejaslabs.beauty.ai.camera"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu-l1H5Ns8Z7mLOOBhBWQ8wZSHm_DOHkw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

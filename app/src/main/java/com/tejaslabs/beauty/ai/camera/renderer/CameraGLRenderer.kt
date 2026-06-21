@@ -56,6 +56,27 @@ class CameraGLRenderer(
         uniform float uFaceSlimming;
         uniform float uFaceRadius;
         
+        // Dark Circle Remover
+        uniform vec2 uUnderEyeLeftCenter;
+        uniform vec2 uUnderEyeRightCenter;
+        uniform float uDarkCircleRemover;
+        
+        // Jaw Sharpening
+        uniform vec2 uJawLeftCenter;
+        uniform vec2 uJawRightCenter;
+        uniform float uJawSharpening;
+        
+        // Nose Slimming
+        uniform vec2 uNoseBridgeTop;
+        uniform vec2 uNoseBridgeBottom;
+        uniform float uNoseSlimming;
+        
+        // Lip Color
+        uniform vec2 uLipCenter;
+        uniform float uLipRadiusX;
+        uniform float uLipRadiusY;
+        uniform float uLipColor;
+        
         // Filters
         uniform int uFilterType;
         uniform float uFilterIntensity;
@@ -87,7 +108,7 @@ class CameraGLRenderer(
             return uv;
         }
         
-        // Pinch warp for face slimming
+        // Pinch warp for face slimming - FIXED: uses (1.0 - strength) to pull inward
         vec2 faceSlimWarp(vec2 uv, vec2 center, float radius, float intensity) {
             if (intensity < 0.01 || center.x < 0.01 || center.y < 0.01) {
                 return uv;
@@ -97,13 +118,63 @@ class CameraGLRenderer(
             distVec.y /= aspect;
             float dist = length(distVec);
             
-            // Apply slimming below the nose/eyes (uv.y < center.y + 0.02 in OpenGL coordinates where 0 is bottom)
-            if (dist < radius && uv.y < center.y + 0.02) {
+            // Apply slimming to the cheek/jawline area around the face center
+            if (dist < radius) {
                 float percent = dist / radius;
-                float strength = (1.0 - percent) * (1.0 - percent) * intensity * 0.15;
+                float strength = (1.0 - percent) * (1.0 - percent) * intensity * 0.45;
                 vec2 warped = uv;
                 float dx = uv.x - center.x;
-                warped.x = center.x + dx * (1.0 + strength);
+                // Pull pixels inward toward center (compress horizontal displacement)
+                warped.x = center.x + dx * (1.0 - strength);
+                return warped;
+            }
+            return uv;
+        }
+        
+        // Jaw sharpening warp - narrows the jawline by pulling jaw points inward
+        vec2 jawSharpenWarp(vec2 uv, vec2 jawPoint, float radius, float intensity) {
+            if (intensity < 0.01 || jawPoint.x < 0.01 || jawPoint.y < 0.01) {
+                return uv;
+            }
+            float aspect = uTexWidth / uTexHeight;
+            vec2 distVec = uv - jawPoint;
+            distVec.y /= aspect;
+            float dist = length(distVec);
+            
+            if (dist < radius) {
+                float percent = dist / radius;
+                float strength = (1.0 - percent) * (1.0 - percent) * intensity * 0.3;
+                float dx = uv.x - jawPoint.x;
+                // Pull toward the vertical center (face midline)
+                vec2 warped = uv;
+                warped.x = jawPoint.x + dx * (1.0 - strength);
+                return warped;
+            }
+            return uv;
+        }
+        
+        // Nose slimming warp - narrows nose bridge horizontally
+        vec2 noseSlimWarp(vec2 uv, vec2 bridgeTop, vec2 bridgeBottom, float intensity) {
+            if (intensity < 0.01 || bridgeTop.x < 0.01) {
+                return uv;
+            }
+            vec2 noseCenter = (bridgeTop + bridgeBottom) * 0.5;
+            float noseLen = distance(bridgeTop, bridgeBottom);
+            float radius = noseLen * 0.8;
+            
+            if (radius < 0.01) return uv;
+            
+            float aspect = uTexWidth / uTexHeight;
+            vec2 distVec = uv - noseCenter;
+            distVec.y /= aspect;
+            float dist = length(distVec);
+            
+            if (dist < radius) {
+                float percent = dist / radius;
+                float strength = (1.0 - percent) * (1.0 - percent) * intensity * 0.35;
+                float dx = uv.x - noseCenter.x;
+                vec2 warped = uv;
+                warped.x = noseCenter.x + dx * (1.0 - strength);
                 return warped;
             }
             return uv;
@@ -148,11 +219,65 @@ class CameraGLRenderer(
             return vec4(sum / totalWeight, centerCol.a);
         }
         
+        // Dark circle remover - brightens the under-eye region
+        vec3 applyDarkCircleRemover(vec3 color, vec2 uv, vec2 underEyeCenter, float intensity) {
+            if (intensity < 0.01 || underEyeCenter.x < 0.01) {
+                return color;
+            }
+            float aspect = uTexWidth / uTexHeight;
+            vec2 distVec = uv - underEyeCenter;
+            distVec.y /= aspect;
+            float dist = length(distVec);
+            float radius = 0.035;
+            
+            if (dist < radius) {
+                float falloff = 1.0 - (dist / radius);
+                falloff = falloff * falloff; // smooth falloff
+                float brighten = falloff * intensity * 0.25;
+                // Lift shadows (gamma correction) and add brightness
+                vec3 lifted = pow(max(color, vec3(0.0)), vec3(1.0 - brighten * 0.4));
+                // Reduce blue/purple tint (common in dark circles)
+                lifted.r += brighten * 0.08;
+                lifted.g += brighten * 0.04;
+                return mix(color, lifted, falloff * intensity);
+            }
+            return color;
+        }
+        
+        // Lip color enhancement - adds subtle warm/rosy tint to lip area
+        vec3 applyLipColor(vec3 color, vec2 uv, vec2 lipCenter, float radiusX, float radiusY, float intensity) {
+            if (intensity < 0.01 || lipCenter.x < 0.01) {
+                return color;
+            }
+            float aspect = uTexWidth / uTexHeight;
+            vec2 distVec = uv - lipCenter;
+            distVec.x /= max(radiusX, 0.01);
+            distVec.y /= (max(radiusY, 0.01) * aspect / (uTexWidth / uTexHeight));
+            float dist = length(distVec);
+            
+            if (dist < 1.0) {
+                float falloff = 1.0 - dist;
+                falloff = falloff * falloff;
+                // Warm rosy tint
+                vec3 tint = vec3(0.85, 0.25, 0.35);
+                vec3 tinted = mix(color, tint * max(dot(color, vec3(0.299, 0.587, 0.114)), 0.3) + color * 0.6, falloff * intensity * 0.4);
+                return tinted;
+            }
+            return color;
+        }
+        
         void main() {
             vec2 scales = vec2(max(uScaleX, 0.01), max(uScaleY, 0.01));
             vec2 leftEyeCenterScreen = vec2(0.5) + (uLeftEyeCenter - vec2(0.5)) / scales;
             vec2 rightEyeCenterScreen = vec2(0.5) + (uRightEyeCenter - vec2(0.5)) / scales;
             vec2 faceCenterScreen = vec2(0.5) + (uFaceCenter - vec2(0.5)) / scales;
+            vec2 jawLeftScreen = vec2(0.5) + (uJawLeftCenter - vec2(0.5)) / scales;
+            vec2 jawRightScreen = vec2(0.5) + (uJawRightCenter - vec2(0.5)) / scales;
+            vec2 noseBridgeTopScreen = vec2(0.5) + (uNoseBridgeTop - vec2(0.5)) / scales;
+            vec2 noseBridgeBottomScreen = vec2(0.5) + (uNoseBridgeBottom - vec2(0.5)) / scales;
+            vec2 underEyeLeftScreen = vec2(0.5) + (uUnderEyeLeftCenter - vec2(0.5)) / scales;
+            vec2 underEyeRightScreen = vec2(0.5) + (uUnderEyeRightCenter - vec2(0.5)) / scales;
+            vec2 lipCenterScreen = vec2(0.5) + (uLipCenter - vec2(0.5)) / scales;
             
             // 1. Warp the coordinates in screen space
             vec2 warpedUV = vQuadCoord;
@@ -162,6 +287,13 @@ class CameraGLRenderer(
             }
             if (uFaceSlimming > 0.0) {
                 warpedUV = faceSlimWarp(warpedUV, faceCenterScreen, uFaceRadius, uFaceSlimming);
+            }
+            if (uJawSharpening > 0.0) {
+                warpedUV = jawSharpenWarp(warpedUV, jawLeftScreen, 0.12, uJawSharpening);
+                warpedUV = jawSharpenWarp(warpedUV, jawRightScreen, 0.12, uJawSharpening);
+            }
+            if (uNoseSlimming > 0.0) {
+                warpedUV = noseSlimWarp(warpedUV, noseBridgeTopScreen, noseBridgeBottomScreen, uNoseSlimming);
             }
             
             // 2. Map warped screen coordinates back to camera coordinates
@@ -182,6 +314,17 @@ class CameraGLRenderer(
                 vec3 brightened = pow(max(color.rgb, vec3(0.0)), vec3(1.0 - uSkinTone * 0.25));
                 color.rgb = mix(color.rgb, brightened, uSkinTone);
                 color.rgb = mix(color.rgb, skinToneTarget * color.rgb, uSkinTone * 0.15);
+            }
+            
+            // 5b. Apply Dark Circle Remover
+            if (uDarkCircleRemover > 0.0) {
+                color.rgb = applyDarkCircleRemover(color.rgb, vQuadCoord, underEyeLeftScreen, uDarkCircleRemover);
+                color.rgb = applyDarkCircleRemover(color.rgb, vQuadCoord, underEyeRightScreen, uDarkCircleRemover);
+            }
+            
+            // 5c. Apply Lip Color
+            if (uLipColor > 0.0) {
+                color.rgb = applyLipColor(color.rgb, vQuadCoord, lipCenterScreen, uLipRadiusX, uLipRadiusY, uLipColor);
             }
             
             // 6. Apply Filter Color Grading
@@ -280,6 +423,10 @@ class CameraGLRenderer(
     @Volatile var skinTone = 0.20f
     @Volatile var eyeEnlargement = 0.0f
     @Volatile var faceSlimming = 0.0f
+    @Volatile var darkCircleRemover = 0.0f
+    @Volatile var jawSharpening = 0.0f
+    @Volatile var noseSlimming = 0.0f
+    @Volatile var lipColor = 0.0f
     @Volatile var filterType = 0
     @Volatile var filterIntensity = 0.60f
     @Volatile var landmarks: FaceLandmarksData? = null
@@ -372,11 +519,27 @@ class CameraGLRenderer(
             var lx = currentLandmarks.leftEyeX
             var rx = currentLandmarks.rightEyeX
             var nx = currentLandmarks.noseX
+            var ulx = currentLandmarks.underEyeLeftX
+            var urx = currentLandmarks.underEyeRightX
+            var jlx = currentLandmarks.jawLeftX
+            var jrx = currentLandmarks.jawRightX
+            var nbtx = currentLandmarks.noseBridgeTopX
+            var lipCx = (currentLandmarks.lipLeftX + currentLandmarks.lipRightX) / 2f
+            var lipLx = currentLandmarks.lipLeftX
+            var lipRx = currentLandmarks.lipRightX
 
             if (isFrontCamera) {
                 lx = 1.0f - lx
                 rx = 1.0f - rx
                 nx = 1.0f - nx
+                ulx = 1.0f - ulx
+                urx = 1.0f - urx
+                jlx = 1.0f - jlx
+                jrx = 1.0f - jrx
+                nbtx = 1.0f - nbtx
+                lipCx = 1.0f - lipCx
+                lipLx = 1.0f - lipLx
+                lipRx = 1.0f - lipRx
             }
 
             GLES20.glUniform2f(leftEyeCenterLoc, lx, 1.0f - currentLandmarks.leftEyeY)
@@ -391,7 +554,31 @@ class CameraGLRenderer(
 
             GLES20.glUniform2f(faceCenterLoc, nx, 1.0f - currentLandmarks.noseY)
             GLES20.glUniform1f(faceSlimLoc, faceSlimming)
-            GLES20.glUniform1f(faceRadiusLoc, 0.15f) // Slimming boundary
+            GLES20.glUniform1f(faceRadiusLoc, 0.25f) // Wider slimming boundary for visible effect
+
+            // Pass dark circle remover params
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uUnderEyeLeftCenter"), ulx, 1.0f - currentLandmarks.underEyeLeftY)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uUnderEyeRightCenter"), urx, 1.0f - currentLandmarks.underEyeRightY)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uDarkCircleRemover"), darkCircleRemover)
+
+            // Pass jaw sharpening params
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uJawLeftCenter"), jlx, 1.0f - currentLandmarks.jawLeftY)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uJawRightCenter"), jrx, 1.0f - currentLandmarks.jawRightY)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uJawSharpening"), jawSharpening)
+
+            // Pass nose slimming params
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uNoseBridgeTop"), nbtx, 1.0f - currentLandmarks.noseBridgeTopY)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uNoseBridgeBottom"), nx, 1.0f - currentLandmarks.noseY)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uNoseSlimming"), noseSlimming)
+
+            // Pass lip color params
+            val lipCenterY = (currentLandmarks.lipTopY + currentLandmarks.lipBottomY) / 2f
+            val lipRadiusX = Math.abs(lipRx - lipLx) * 0.6f
+            val lipRadiusY = Math.abs(currentLandmarks.lipBottomY - currentLandmarks.lipTopY) * 1.2f
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uLipCenter"), lipCx, 1.0f - lipCenterY)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipRadiusX"), lipRadiusX)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipRadiusY"), lipRadiusY)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipColor"), lipColor)
         } else {
             // Reset to prevent warping if no face is detected
             GLES20.glUniform2f(leftEyeCenterLoc, 0f, 0f)
@@ -402,6 +589,23 @@ class CameraGLRenderer(
             GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uFaceCenter"), 0f, 0f)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uFaceSlimming"), 0f)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uFaceRadius"), 0f)
+
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uUnderEyeLeftCenter"), 0f, 0f)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uUnderEyeRightCenter"), 0f, 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uDarkCircleRemover"), 0f)
+
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uJawLeftCenter"), 0f, 0f)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uJawRightCenter"), 0f, 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uJawSharpening"), 0f)
+
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uNoseBridgeTop"), 0f, 0f)
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uNoseBridgeBottom"), 0f, 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uNoseSlimming"), 0f)
+
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(programId, "uLipCenter"), 0f, 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipRadiusX"), 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipRadiusY"), 0f)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(programId, "uLipColor"), 0f)
         }
 
         // Pass filter details

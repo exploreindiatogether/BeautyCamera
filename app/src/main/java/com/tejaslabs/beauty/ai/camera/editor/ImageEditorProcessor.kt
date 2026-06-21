@@ -207,11 +207,15 @@ object ImageEditorProcessor {
         skinTone: Float,
         eyeEnlargement: Float,
         faceSlimming: Float,
+        darkCircleRemover: Float = 0f,
+        jawSharpening: Float = 0f,
+        noseSlimming: Float = 0f,
+        lipColor: Float = 0f,
         landmarks: FaceLandmarksData?
     ): Bitmap {
         var processed = bitmap
         
-        // 1. Warp eyes and slim face if landmarks are available
+        // 1. Warp eyes, slim face, sharpen jaw, slim nose if landmarks are available
         if (landmarks != null) {
             processed = applyWarp(
                 bitmap = processed,
@@ -221,8 +225,16 @@ object ImageEditorProcessor {
                 rightEyeY = landmarks.rightEyeY,
                 noseX = landmarks.noseX,
                 noseY = landmarks.noseY,
+                noseBridgeTopX = landmarks.noseBridgeTopX,
+                noseBridgeTopY = landmarks.noseBridgeTopY,
+                jawLeftX = landmarks.jawLeftX,
+                jawLeftY = landmarks.jawLeftY,
+                jawRightX = landmarks.jawRightX,
+                jawRightY = landmarks.jawRightY,
                 eyeEnlargement = eyeEnlargement,
-                faceSlimming = faceSlimming
+                faceSlimming = faceSlimming,
+                jawSharpening = jawSharpening,
+                noseSlimming = noseSlimming
             )
         }
 
@@ -234,6 +246,16 @@ object ImageEditorProcessor {
             landmarks = landmarks
         )
 
+        // 3. Apply dark circle remover
+        if (darkCircleRemover > 0.01f && landmarks != null) {
+            processed = applyDarkCircleRemover(processed, landmarks, darkCircleRemover)
+        }
+
+        // 4. Apply lip color
+        if (lipColor > 0.01f && landmarks != null) {
+            processed = applyLipColor(processed, landmarks, lipColor)
+        }
+
         return processed
     }
 
@@ -242,8 +264,13 @@ object ImageEditorProcessor {
         leftEyeX: Float, leftEyeY: Float,
         rightEyeX: Float, rightEyeY: Float,
         noseX: Float, noseY: Float,
+        noseBridgeTopX: Float, noseBridgeTopY: Float,
+        jawLeftX: Float, jawLeftY: Float,
+        jawRightX: Float, jawRightY: Float,
         eyeEnlargement: Float,
-        faceSlimming: Float
+        faceSlimming: Float,
+        jawSharpening: Float,
+        noseSlimming: Float
     ): Bitmap {
         val width = bitmap.width
         val height = bitmap.height
@@ -251,7 +278,8 @@ object ImageEditorProcessor {
 
         val maxDim = Math.max(width, height).toFloat()
         val eyeRadius = 0.05f * maxDim
-        val faceRadius = 0.15f * maxDim
+        val faceRadius = 0.25f * maxDim
+        val jawRadius = 0.12f * maxDim
 
         // Warp eyes
         if (eyeEnlargement > 0.01f) {
@@ -259,9 +287,27 @@ object ImageEditorProcessor {
             warpRegionBulge(bitmap, output, rightEyeX * width, rightEyeY * height, eyeRadius, eyeEnlargement)
         }
 
-        // Warp face slimming
+        // Warp face slimming - FIXED direction
         if (faceSlimming > 0.01f) {
             warpRegionSlim(bitmap, output, noseX * width, noseY * height, faceRadius, faceSlimming)
+        }
+
+        // Jaw sharpening
+        if (jawSharpening > 0.01f) {
+            warpRegionSlim(bitmap, output, jawLeftX * width, jawLeftY * height, jawRadius, jawSharpening)
+            warpRegionSlim(bitmap, output, jawRightX * width, jawRightY * height, jawRadius, jawSharpening)
+        }
+
+        // Nose slimming
+        if (noseSlimming > 0.01f) {
+            val noseCenterX = (noseBridgeTopX + noseX) / 2f * width
+            val noseCenterY = (noseBridgeTopY + noseY) / 2f * height
+            val noseLen = Math.sqrt(
+                ((noseX - noseBridgeTopX) * width * (noseX - noseBridgeTopX) * width +
+                 (noseY - noseBridgeTopY) * height * (noseY - noseBridgeTopY) * height).toDouble()
+            ).toFloat()
+            val noseRadius = noseLen * 0.6f
+            warpRegionNoseSlim(bitmap, output, noseCenterX, noseCenterY, noseRadius, noseSlimming)
         }
 
         return output
@@ -296,6 +342,7 @@ object ImageEditorProcessor {
         }
     }
 
+    // FIXED: Changed (1.0f + strength) to (1.0f - strength) to pull pixels inward for slimming
     private fun warpRegionSlim(
         src: Bitmap,
         dest: Bitmap,
@@ -306,7 +353,7 @@ object ImageEditorProcessor {
     ) {
         val startX = (centerX - radius).toInt().coerceIn(0, src.width - 1)
         val endX = (centerX + radius).toInt().coerceIn(0, src.width - 1)
-        val startY = (centerY - 0.02f * src.height).toInt().coerceIn(0, src.height - 1)
+        val startY = (centerY - radius).toInt().coerceIn(0, src.height - 1)
         val endY = (centerY + radius).toInt().coerceIn(0, src.height - 1)
 
         for (y in startY..endY) {
@@ -316,13 +363,168 @@ object ImageEditorProcessor {
                 val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
                 if (dist < radius) {
                     val percent = dist / radius
-                    val strength = (1.0f - percent) * (1.0f - percent) * intensity * 0.15f
-                    val srcX = centerX + dx * (1.0f + strength)
+                    val strength = (1.0f - percent) * (1.0f - percent) * intensity * 0.45f
+                    // Pull pixels inward (compress horizontal displacement)
+                    val srcX = centerX + dx * (1.0f - strength)
                     val srcY = y.toFloat()
                     dest.setPixel(x, y, getBilinearPixel(src, srcX, srcY))
                 }
             }
         }
+    }
+
+    private fun warpRegionNoseSlim(
+        src: Bitmap,
+        dest: Bitmap,
+        centerX: Float,
+        centerY: Float,
+        radius: Float,
+        intensity: Float
+    ) {
+        if (radius < 1f) return
+        val startX = (centerX - radius).toInt().coerceIn(0, src.width - 1)
+        val endX = (centerX + radius).toInt().coerceIn(0, src.width - 1)
+        val startY = (centerY - radius).toInt().coerceIn(0, src.height - 1)
+        val endY = (centerY + radius).toInt().coerceIn(0, src.height - 1)
+
+        for (y in startY..endY) {
+            for (x in startX..endX) {
+                val dx = x - centerX
+                val dy = y - centerY
+                val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                if (dist < radius) {
+                    val percent = dist / radius
+                    val strength = (1.0f - percent) * (1.0f - percent) * intensity * 0.35f
+                    val srcX = centerX + dx * (1.0f - strength)
+                    val srcY = y.toFloat()
+                    dest.setPixel(x, y, getBilinearPixel(src, srcX, srcY))
+                }
+            }
+        }
+    }
+
+    private fun applyDarkCircleRemover(bitmap: Bitmap, landmarks: FaceLandmarksData, intensity: Float): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val underEyePoints = listOf(
+            Pair(landmarks.underEyeLeftX, landmarks.underEyeLeftY),
+            Pair(landmarks.underEyeRightX, landmarks.underEyeRightY)
+        )
+
+        val radius = 0.035f * Math.max(width, height)
+
+        for ((ux, uy) in underEyePoints) {
+            val cx = (ux * width).toInt()
+            val cy = (uy * height).toInt()
+            val r = radius.toInt()
+
+            val sx = (cx - r).coerceIn(0, width - 1)
+            val ex = (cx + r).coerceIn(0, width - 1)
+            val sy = (cy - r).coerceIn(0, height - 1)
+            val ey = (cy + r).coerceIn(0, height - 1)
+
+            for (y in sy..ey) {
+                for (x in sx..ex) {
+                    val dx = x - cx
+                    val dy = y - cy
+                    val dist = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                    if (dist < radius) {
+                        val falloff = (1.0f - dist / radius)
+                        val falloffSq = falloff * falloff
+                        val brighten = falloffSq * intensity * 0.25f
+
+                        val idx = y * width + x
+                        val c = pixels[idx]
+                        val a = c ushr 24
+                        var cr = (c shr 16 and 0xff).toFloat()
+                        var cg = (c shr 8 and 0xff).toFloat()
+                        var cb = (c and 0xff).toFloat()
+
+                        // Gamma lift to brighten shadows
+                        val gamma = 1.0f - brighten * 0.4f
+                        cr = (Math.pow((cr / 255.0), gamma.toDouble()) * 255.0).toFloat()
+                        cg = (Math.pow((cg / 255.0), gamma.toDouble()) * 255.0).toFloat()
+                        cb = (Math.pow((cb / 255.0), gamma.toDouble()) * 255.0).toFloat()
+
+                        // Reduce blue/purple tint
+                        cr += brighten * 20f
+                        cg += brighten * 10f
+
+                        val ir = cr.toInt().coerceIn(0, 255)
+                        val ig = cg.toInt().coerceIn(0, 255)
+                        val ib = cb.toInt().coerceIn(0, 255)
+
+                        output.setPixel(x, y, (a shl 24) or (ir shl 16) or (ig shl 8) or ib)
+                    }
+                }
+            }
+        }
+
+        return output
+    }
+
+    private fun applyLipColor(bitmap: Bitmap, landmarks: FaceLandmarksData, intensity: Float): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val lipCenterX = (landmarks.lipLeftX + landmarks.lipRightX) / 2f
+        val lipCenterY = (landmarks.lipTopY + landmarks.lipBottomY) / 2f
+        val lipRadiusX = Math.abs(landmarks.lipRightX - landmarks.lipLeftX) * 0.6f
+        val lipRadiusY = Math.abs(landmarks.lipBottomY - landmarks.lipTopY) * 1.2f
+
+        if (lipRadiusX < 0.01f || lipRadiusY < 0.01f) return bitmap
+
+        val cx = (lipCenterX * width).toInt()
+        val cy = (lipCenterY * height).toInt()
+        val rx = (lipRadiusX * width).toInt()
+        val ry = (lipRadiusY * height).toInt()
+
+        val sx = (cx - rx).coerceIn(0, width - 1)
+        val ex = (cx + rx).coerceIn(0, width - 1)
+        val sy = (cy - ry).coerceIn(0, height - 1)
+        val ey = (cy + ry).coerceIn(0, height - 1)
+
+        for (y in sy..ey) {
+            for (x in sx..ex) {
+                val nx = (x - cx).toFloat() / rx
+                val ny = (y - cy).toFloat() / ry
+                val dist = Math.sqrt((nx * nx + ny * ny).toDouble()).toFloat()
+
+                if (dist < 1.0f) {
+                    val falloff = (1.0f - dist)
+                    val falloffSq = falloff * falloff
+
+                    val idx = y * width + x
+                    val c = pixels[idx]
+                    val a = c ushr 24
+                    val cr = (c shr 16 and 0xff).toFloat()
+                    val cg = (c shr 8 and 0xff).toFloat()
+                    val cb = (c and 0xff).toFloat()
+
+                    // Warm rosy tint blended with original
+                    val lum = 0.299f * cr + 0.587f * cg + 0.114f * cb
+                    val tintR = 0.85f * Math.max(lum / 255f, 0.3f) * 255f + cr * 0.6f
+                    val tintG = 0.25f * Math.max(lum / 255f, 0.3f) * 255f + cg * 0.6f
+                    val tintB = 0.35f * Math.max(lum / 255f, 0.3f) * 255f + cb * 0.6f
+
+                    val blend = falloffSq * intensity * 0.4f
+                    val ir = (cr * (1f - blend) + tintR * blend).toInt().coerceIn(0, 255)
+                    val ig = (cg * (1f - blend) + tintG * blend).toInt().coerceIn(0, 255)
+                    val ib = (cb * (1f - blend) + tintB * blend).toInt().coerceIn(0, 255)
+
+                    output.setPixel(x, y, (a shl 24) or (ir shl 16) or (ig shl 8) or ib)
+                }
+            }
+        }
+
+        return output
     }
 
     private fun getBilinearPixel(bitmap: Bitmap, x: Float, y: Float): Int {

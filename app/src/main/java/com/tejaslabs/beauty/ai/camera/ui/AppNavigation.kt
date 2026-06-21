@@ -24,6 +24,10 @@ sealed class Screen {
         val initialSkinTone: Float = 0.20f,
         val initialEyeEnlargement: Float = 0.0f,
         val initialFaceSlimming: Float = 0.0f,
+        val initialDarkCircleRemover: Float = 0.0f,
+        val initialJawSharpening: Float = 0.0f,
+        val initialNoseSlimming: Float = 0.0f,
+        val initialLipColor: Float = 0.0f,
         val initialFilterType: Int = 0,
         val initialFilterIntensity: Float = 0.60f,
         val initialCropRatio: String = "Free"
@@ -45,6 +49,10 @@ fun AppNavigation() {
     var activeSkinTone by remember { mutableStateOf(sharedPrefs.getFloat("skinTone", 0.0f)) }
     var activeEyeEnlargement by remember { mutableStateOf(sharedPrefs.getFloat("eyeEnlargement", 0.0f)) }
     var activeFaceSlimming by remember { mutableStateOf(sharedPrefs.getFloat("faceSlimming", 0.0f)) }
+    var activeDarkCircleRemover by remember { mutableStateOf(sharedPrefs.getFloat("darkCircleRemover", 0.0f)) }
+    var activeJawSharpening by remember { mutableStateOf(sharedPrefs.getFloat("jawSharpening", 0.0f)) }
+    var activeNoseSlimming by remember { mutableStateOf(sharedPrefs.getFloat("noseSlimming", 0.0f)) }
+    var activeLipColor by remember { mutableStateOf(sharedPrefs.getFloat("lipColor", 0.0f)) }
     var activeFilterType by remember { mutableIntStateOf(sharedPrefs.getInt("filterType", 0)) }
     var activeFilterIntensity by remember { mutableStateOf(sharedPrefs.getFloat("filterIntensity", 0.60f)) }
 
@@ -56,7 +64,9 @@ fun AppNavigation() {
     // Automatically save values to SharedPreferences on change
     LaunchedEffect(
         activeSmoothing, activeBrightness, activeSkinTone,
-        activeEyeEnlargement, activeFaceSlimming, activeFilterType, activeFilterIntensity,
+        activeEyeEnlargement, activeFaceSlimming, activeDarkCircleRemover,
+        activeJawSharpening, activeNoseSlimming, activeLipColor,
+        activeFilterType, activeFilterIntensity,
         activeFlashMode, activeTimerSeconds, activeIsGridEnabled, activeAspectRatio
     ) {
         sharedPrefs.edit().apply {
@@ -65,6 +75,10 @@ fun AppNavigation() {
             putFloat("skinTone", activeSkinTone)
             putFloat("eyeEnlargement", activeEyeEnlargement)
             putFloat("faceSlimming", activeFaceSlimming)
+            putFloat("darkCircleRemover", activeDarkCircleRemover)
+            putFloat("jawSharpening", activeJawSharpening)
+            putFloat("noseSlimming", activeNoseSlimming)
+            putFloat("lipColor", activeLipColor)
             putInt("filterType", activeFilterType)
             putFloat("filterIntensity", activeFilterIntensity)
             putInt("flashMode", activeFlashMode)
@@ -91,18 +105,26 @@ fun AppNavigation() {
                     initialSkinTone = activeSkinTone,
                     initialEyeEnlargement = activeEyeEnlargement,
                     initialFaceSlimming = activeFaceSlimming,
+                    initialDarkCircleRemover = activeDarkCircleRemover,
+                    initialJawSharpening = activeJawSharpening,
+                    initialNoseSlimming = activeNoseSlimming,
+                    initialLipColor = activeLipColor,
                     initialFilterType = activeFilterType,
                     initialFilterIntensity = activeFilterIntensity,
                     initialFlashMode = activeFlashMode,
                     initialTimerSeconds = activeTimerSeconds,
                     initialIsGridEnabled = activeIsGridEnabled,
                     initialAspectRatio = activeAspectRatio,
-                    onBeautySettingsChanged = { smoothing, brightness, tone, eye, face, filterType, filterIntensity ->
+                    onBeautySettingsChanged = { smoothing, brightness, tone, eye, face, darkCircle, jaw, nose, lip, filterType, filterIntensity ->
                         activeSmoothing = smoothing
                         activeBrightness = brightness
                         activeSkinTone = tone
                         activeEyeEnlargement = eye
                         activeFaceSlimming = face
+                        activeDarkCircleRemover = darkCircle
+                        activeJawSharpening = jaw
+                        activeNoseSlimming = nose
+                        activeLipColor = lip
                         activeFilterType = filterType
                         activeFilterIntensity = filterIntensity
                     },
@@ -115,13 +137,17 @@ fun AppNavigation() {
                     onOpenGallery = {
                         currentScreen = Screen.GalleryImport
                     },
-                    onPhotoCaptured = { file, aspectRatio, smoothing, brightness, tone, eye, face, filterType, filterIntensity ->
+                    onPhotoCaptured = { file, aspectRatio, smoothing, brightness, tone, eye, face, darkCircle, jaw, nose, lip, filterType, filterIntensity ->
                         // Cache values to keep in sync
                         activeSmoothing = smoothing
                         activeBrightness = brightness
                         activeSkinTone = tone
                         activeEyeEnlargement = eye
                         activeFaceSlimming = face
+                        activeDarkCircleRemover = darkCircle
+                        activeJawSharpening = jaw
+                        activeNoseSlimming = nose
+                        activeLipColor = lip
                         activeFilterType = filterType
                         activeFilterIntensity = filterIntensity
                         activeAspectRatio = aspectRatio
@@ -134,6 +160,10 @@ fun AppNavigation() {
                             initialSkinTone = tone,
                             initialEyeEnlargement = eye,
                             initialFaceSlimming = face,
+                            initialDarkCircleRemover = darkCircle,
+                            initialJawSharpening = jaw,
+                            initialNoseSlimming = nose,
+                            initialLipColor = lip,
                             initialFilterType = filterType,
                             initialFilterIntensity = filterIntensity,
                             initialCropRatio = aspectRatio
@@ -163,6 +193,10 @@ fun AppNavigation() {
                     initialSkinTone = screen.initialSkinTone,
                     initialEyeEnlargement = screen.initialEyeEnlargement,
                     initialFaceSlimming = screen.initialFaceSlimming,
+                    initialDarkCircleRemover = screen.initialDarkCircleRemover,
+                    initialJawSharpening = screen.initialJawSharpening,
+                    initialNoseSlimming = screen.initialNoseSlimming,
+                    initialLipColor = screen.initialLipColor,
                     initialFilterType = screen.initialFilterType,
                     initialFilterIntensity = screen.initialFilterIntensity,
                     initialCropRatio = screen.initialCropRatio,
